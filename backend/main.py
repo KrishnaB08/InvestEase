@@ -12,6 +12,7 @@ from ai_engine import get_ai_advice
 from news_fetcher import get_stock_news, get_news_headlines_for_ai
 from database import save_fear_score, get_fear_scores, save_trade, get_trades, get_portfolio_summary
 from fx_service import convert_currency, get_trend
+import requests
 
 load_dotenv()
 
@@ -38,6 +39,15 @@ class TradeRequest(BaseModel):
     qty: int
     total: float
     profit: Optional[float] = None
+
+class AIAdviceRequest(BaseModel):
+    symbol: str
+    name: str
+    price: float
+    change: float
+    trend: str
+    risk: str
+    currency: str = "INR"
 
 @app.get("/")
 def home():
@@ -93,17 +103,63 @@ def get_news(symbol: str):
 # AI ADVICE (now with real news)
 # ========================
 
-@app.get("/ai-advice/{symbol}")
-def ai_advice(symbol: str):
+@app.get("/searchStock")
+def proxy_search_stock(q: str):
+    url = f"https://query1.finance.yahoo.com/v1/finance/search?q={q}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    res = requests.get(url, headers=headers)
+    return {"quotes": res.json().get("quotes", [])}
+
+import yfinance as yf
+
+@app.get("/getStockData")
+def proxy_get_stock_data(symbol: str):
     try:
-        stats = get_stock_stats(symbol)
-        # Fetch real news headlines for Claude's context
-        news_headlines = get_news_headlines_for_ai(symbol)
+        ticker = yf.Ticker(symbol)
+        # Use fast_info and info fallback for maximum compatibility
+        fast = getattr(ticker, "fast_info", {})
+        info = ticker.info or {}
+        
+        price = info.get("currentPrice") or info.get("regularMarketPrice") or fast.get("lastPrice")
+        prev_close = info.get("previousClose") or fast.get("previousClose")
+        
+        if not price or not prev_close:
+            # Fallback to history if info fails
+            hist = ticker.history(period="5d")
+            if not hist.empty:
+                price = hist["Close"].iloc[-1]
+                prev_close = hist["Close"].iloc[-2] if len(hist) > 1 else price
+            else:
+                return {}
+                
+        change_pct = ((price - prev_close) / prev_close) * 100 if prev_close else 0
+        name = info.get("shortName") or info.get("longName") or symbol
+        currency = info.get("currency") or fast.get("currency", "INR")
+        
+        return {
+            "shortName": name,
+            "regularMarketPrice": round(float(price), 2),
+            "regularMarketChangePercent": round(float(change_pct), 2),
+            "currency": currency
+        }
+    except Exception as e:
+        return {}
+
+# ========================
+# AI ADVICE (Dynamic Data)
+# ========================
+
+@app.post("/ai-advice")
+def ai_advice(req: AIAdviceRequest):
+    try:
         return get_ai_advice(
-            symbol=symbol,
-            price=stats["current_price"],
-            volatility=stats["volatility_pct"],
-            news_headlines=news_headlines
+            symbol=req.symbol,
+            name=req.name,
+            price=req.price,
+            change=req.change,
+            trend=req.trend,
+            risk=req.risk,
+            currency=req.currency
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

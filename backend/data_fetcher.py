@@ -43,45 +43,78 @@ STOCK_LIST = {
     "CRUDE OIL": "CL=F"
 }
 
+def _symbol_candidates(symbol: str) -> list:
+    """Return possible Yahoo Finance symbols for flexible lookup."""
+    raw = (symbol or "").strip().upper()
+    if not raw:
+        raise ValueError("Symbol is required")
+
+    if raw in STOCK_LIST:
+        return [STOCK_LIST[raw]]
+
+    # If user already passed an exchange suffix/futures format, trust it.
+    if any(token in raw for token in [".", "=", "-"]):
+        return [raw]
+
+    # Try global symbol first, then common Indian exchanges.
+    return [raw, f"{raw}.NS", f"{raw}.BO"]
+
+
+def _fetch_first_history(candidates: list, period: str):
+    for candidate in candidates:
+        ticker = yf.Ticker(candidate)
+        df = ticker.history(period=period)
+        if not df.empty:
+            return candidate, df
+    raise ValueError(f"No data found for symbol candidates: {', '.join(candidates)}")
+
+
+def _fetch_first_price(candidates: list) -> tuple:
+    for candidate in candidates:
+        ticker = yf.Ticker(candidate)
+        try:
+            fast = getattr(ticker, "fast_info", {}) or {}
+            price = fast.get("lastPrice") or fast.get("regularMarketPrice")
+            if price:
+                return candidate, float(price)
+        except Exception:
+            pass
+        try:
+            info = ticker.info or {}
+            price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
+            if price:
+                return candidate, float(price)
+        except Exception:
+            pass
+    raise ValueError(f"Unable to fetch current price for: {', '.join(candidates)}")
+
+
 def get_stock_history(symbol: str, period: str = "2y"):
     """Fetch historical price data from Yahoo Finance."""
-    if symbol in STOCK_LIST:
-        symbol = STOCK_LIST[symbol]
-    elif ".NS" not in symbol and ".BO" not in symbol:
-        symbol = symbol.upper() + ".NS"
-
-    ticker = yf.Ticker(symbol)
-    df = ticker.history(period=period)
-
-    if df.empty:
-        raise ValueError(f"No data found for {symbol}")
+    candidates = _symbol_candidates(symbol)
+    resolved_symbol, df = _fetch_first_history(candidates, period)
 
     df["daily_return"] = df["Close"].pct_change()
+    df.attrs["resolved_symbol"] = resolved_symbol
     return df
 
 def get_current_price(symbol: str) -> float:
     """Get the latest price of a stock."""
-    if symbol in STOCK_LIST:
-        symbol = STOCK_LIST[symbol]
-    elif ".NS" not in symbol:
-        symbol = symbol.upper() + ".NS"
-
-    ticker = yf.Ticker(symbol)
-    info = ticker.info
-    price = info.get("currentPrice") or \
-            info.get("regularMarketPrice") or \
-            info.get("previousClose", 0)
-    return float(price)
+    candidates = _symbol_candidates(symbol)
+    _, price = _fetch_first_price(candidates)
+    return price
 
 def get_stock_stats(symbol: str) -> dict:
     """Get summarized statistics for a stock."""
     df = get_stock_history(symbol)
     current_price = get_current_price(symbol)
     daily_returns = df["daily_return"].dropna()
+    resolved_symbol = df.attrs.get("resolved_symbol", symbol)
 
     return {
-        "symbol":          symbol,
-        "name":            symbol.replace(".NS", ""),
+        "symbol":          symbol.upper(),
+        "resolved_symbol": resolved_symbol,
+        "name":            resolved_symbol.replace(".NS", "").replace(".BO", ""),
         "current_price":   round(current_price, 2),
         "volatility_pct":  round(float(daily_returns.std()) * 100, 3),
         "avg_daily_return":round(float(daily_returns.mean()) * 100, 4),

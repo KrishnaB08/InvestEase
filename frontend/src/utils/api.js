@@ -31,8 +31,14 @@ export const fetchRisk = (symbol) =>
 // AI ADVISOR
 // ========================
 
-export const fetchAIAdvice = (symbol) => 
-  api.get(`/ai-advice/${symbol}`).then(res => res.data);
+export const searchStock = (query) => 
+  api.get(`/searchStock?q=${query}`).then(res => res.data.quotes);
+
+export const getStockDetails = (symbol) => 
+  api.get(`/getStockData?symbol=${symbol}`).then(res => res.data);
+
+export const fetchAIAdviceDynamic = (payload) => 
+  api.post(`/ai-advice`, payload).then(res => res.data);
 
 export const fetchFxConversion = (amount, fromCurrency, toCurrency) =>
   api.get('/fx/convert', {

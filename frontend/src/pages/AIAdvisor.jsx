@@ -2,13 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, BrainCircuit, ShieldCheck, Timer, AlertCircle, 
-  ThumbsUp, ThumbsDown, ArrowRight, Zap, TrendingUp,
-  TrendingDown, Activity, Settings, CheckCircle2, XCircle, ChevronRight, BarChart3, Newspaper, LineChart, Database, ExternalLink
+  ThumbsUp, ThumbsDown, ArrowRight, TrendingUp,
+  Settings, CheckCircle2, XCircle, BarChart3, Newspaper, LineChart, Database, ExternalLink
 } from 'lucide-react';
 import { createChart, CandlestickSeries } from 'lightweight-charts';
-import { fetchAIAdvice, fetchChartData, fetchNews } from '../utils/api';
+import { fetchAIAdviceDynamic, fetchChartData, fetchNews, searchStock, getStockDetails } from '../utils/api';
 
-/* --- SUB-COMPONENT: AI Candlestick Chart --- */
 const AICandlestickChart = ({ data, entryPoints }) => {
   const chartContainerRef = useRef();
 
@@ -34,7 +33,6 @@ const AICandlestickChart = ({ data, entryPoints }) => {
 
     series.setData(data);
 
-    // Add Strategy Price Lines
     if (entryPoints) {
       series.createPriceLine({ price: entryPoints.target, color: '#10b981', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'TARGET' });
       series.createPriceLine({ price: entryPoints.entryZone, color: '#3b82f6', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'ENTRY' });
@@ -53,19 +51,70 @@ const AICandlestickChart = ({ data, entryPoints }) => {
   return <div ref={chartContainerRef} className="w-full h-full min-h-[350px]" />;
 };
 
-/* --- MAIN COMPONENT --- */
 const AIAdvisor = () => {
   const [ticker, setTicker] = useState('');
   const [analysis, setAnalysis] = useState(null);
   const [realNews, setRealNews] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchTimeout = useRef(null);
 
-  const getAdvice = async () => {
-    if (!ticker) return;
+  const handleSearchInput = (e) => {
+    const query = e.target.value;
+    setTicker(query);
+    
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    if (query.trim().length === 0) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    searchTimeout.current = setTimeout(async () => {
+      try {
+        const quotes = await searchStock(query);
+        setSearchResults(quotes.filter(q => q.symbol && q.shortname));
+        setShowDropdown(true);
+      } catch (err) {
+        console.error("Search error", err);
+      }
+    }, 300);
+  };
+
+  const getAdviceForSymbol = async (selectedSymbol) => {
+    if (!selectedSymbol) return;
+    setTicker(selectedSymbol);
+    setShowDropdown(false);
     setLoading(true);
+
     try {
-      // Fetch live AI Advice from Claude via FastAPI
-      const analysisData = await fetchAIAdvice(ticker.toUpperCase());
+      // 1. Fetch real stock details
+      const details = await getStockDetails(selectedSymbol);
+      if (!details) {
+         alert("Stock not found or not listed");
+         setLoading(false);
+         return;
+      }
+
+      const name = details.shortName || selectedSymbol;
+      const price = details.regularMarketPrice || 0;
+      const change = details.regularMarketChangePercent || 0;
+      
+      // Derive attributes
+      const trend = change > 0 ? "Uptrend" : "Downtrend";
+      const risk = Math.abs(change) > 2 ? "High" : "Moderate";
+
+      // 2. Fetch AI Analysis
+      const analysisData = await fetchAIAdviceDynamic({
+          symbol: selectedSymbol,
+          name,
+          price,
+          change,
+          trend,
+          risk,
+          currency: details.currency || 'INR'
+      });
       
       if (analysisData.error) {
          console.error("AI Error:", analysisData.error);
@@ -73,9 +122,8 @@ const AIAdvisor = () => {
          return;
       }
       
-      // Fetch Live OHLC Data from yfinance via FastAPI
       try {
-          const chartData = await fetchChartData(ticker.toUpperCase());
+          const chartData = await fetchChartData(selectedSymbol);
           analysisData.chart = {
               data: chartData,
               entryPoints: analysisData.entryPoints
@@ -85,9 +133,8 @@ const AIAdvisor = () => {
           analysisData.chart = { data: [], entryPoints: analysisData.entryPoints };
       }
 
-      // Fetch real news
       try {
-          const newsData = await fetchNews(ticker.toUpperCase());
+          const newsData = await fetchNews(selectedSymbol);
           setRealNews(newsData.news || []);
       } catch (err) {
           console.error("Failed to fetch news", err);
@@ -96,8 +143,8 @@ const AIAdvisor = () => {
 
       setAnalysis(analysisData);
     } catch (err) {
-      console.error("Backend Connection Error", err);
-      alert("Error connecting to Python backend. Is it running on port 8000?");
+      console.error("Fetch Error", err);
+      alert("Unable to fetch market data");
     }
     setLoading(false);
   };
@@ -118,26 +165,48 @@ const AIAdvisor = () => {
         <p className="text-slate-400 max-w-2xl mx-auto">Get objective, datadriven analysis on any asset. Understand exactly why you should invest, how much risk is involved, and where to set your exits.</p>
       </header>
 
-      {/* Search Input */}
-      <div className="relative max-w-2xl mx-auto">
+      <div className="relative max-w-2xl mx-auto z-50">
         <div className="glass-card flex items-center p-2 shadow-[0_0_40px_rgba(59,130,246,0.1)] border-blue-500/30">
           <div className="pl-4 text-slate-500"><Search size={24} /></div>
           <input 
             type="text" 
-            placeholder="Search Stock (e.g. RELIANCE, TCS, AAPL)..." 
+            placeholder="Search Stock (e.g. RELIANCE, AAPL)..." 
             value={ticker}
-            onChange={(e) => setTicker(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && getAdvice()}
-            className="w-full bg-transparent border-none focus:ring-0 text-xl font-bold p-4 uppercase placeholder:text-slate-600 outline-none text-white"
+            onChange={handleSearchInput}
+            onKeyPress={(e) => e.key === 'Enter' && getAdviceForSymbol(ticker.toUpperCase())}
+            className="w-full bg-transparent border-none focus:ring-0 text-xl font-bold p-4 uppercase placeholder:text-slate-600 outline-none text-white relative z-50"
           />
           <button 
-            onClick={getAdvice}
+            onClick={() => getAdviceForSymbol(ticker.toUpperCase())}
             disabled={loading}
-            className="neo-btn-primary px-8 py-4 flex items-center gap-2 whitespace-nowrap"
+            className="neo-btn-primary px-8 py-4 flex items-center gap-2 whitespace-nowrap relative z-50"
           >
             {loading ? "Computing..." : "Run Analysis"} <ArrowRight size={18} />
           </button>
         </div>
+        
+        {/* DROPDOWN RESULTS */}
+        {showDropdown && searchResults.length > 0 && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="absolute top-full left-0 w-full mt-2 bg-slate-900/95 backdrop-blur-xl border border-blue-500/20 rounded-2xl shadow-2xl overflow-hidden z-[100]"
+          >
+            {searchResults.map((res, i) => (
+              <div 
+                key={i} 
+                onClick={() => getAdviceForSymbol(res.symbol)}
+                className="px-6 py-4 hover:bg-blue-500/20 cursor-pointer border-b border-white/5 last:border-0 flex justify-between items-center transition-colors"
+              >
+                <div>
+                  <div className="font-bold text-white flex items-center gap-2">
+                    {res.symbol}
+                  </div>
+                  <div className="text-xs text-slate-400 font-medium">{res.shortname || res.longname} &bull; {res.exchDisp}</div>
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        )}
       </div>
 
       <AnimatePresence mode="wait">
@@ -146,7 +215,6 @@ const AIAdvisor = () => {
             initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
             className="space-y-8"
           >
-            {/* Top Analysis Dashboard */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                <div className="glass-card p-6 bg-gradient-to-br from-blue-500/5 to-purple-500/5 flex flex-col justify-center border-blue-500/20">
                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{analysis.sector}</p>
@@ -154,7 +222,7 @@ const AIAdvisor = () => {
                    <p className="text-sm font-bold text-slate-400 mb-6">{analysis.name}</p>
                    <div>
                        <p className="text-[10px] uppercase text-slate-500 font-bold">Current Valuation</p>
-                       <p className="text-2xl font-bold text-white">₹{analysis.price?.toLocaleString()}</p>
+                       <p className="text-2xl font-bold text-white">{analysis.currencySymbol || '₹'}{analysis.price?.toLocaleString()}</p>
                    </div>
                </div>
 
@@ -212,24 +280,15 @@ const AIAdvisor = () => {
                </div>
             </div>
 
-            {/* Middle Section: Chart & Debate */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                <div className="lg:col-span-2 glass-card p-6 border-white/5 flex flex-col">
                   <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-6 flex items-center gap-2"><LineChart size={14}/> Trade Map Visualization</h4>
                   <div className="flex-1 bg-black/40 rounded-2xl overflow-hidden border border-white/5">
                      <AICandlestickChart data={analysis.chart?.data} entryPoints={analysis.chart?.entryPoints} />
                   </div>
-                  <div className="flex justify-between items-center mt-4 px-2">
-                      <div className="flex gap-4 text-[10px] font-bold uppercase">
-                          <span className="text-emerald-500 flex items-center gap-1"><span className="w-2 h-2 rounded-full border-t-2 border-emerald-500 border-dashed" /> Target</span>
-                          <span className="text-blue-500 flex items-center gap-1"><span className="w-2 h-2 rounded-full border-t-2 border-blue-500 border-dashed" /> Entry</span>
-                          <span className="text-rose-500 flex items-center gap-1"><span className="w-2 h-2 rounded-full border-t-2 border-rose-500 border-dashed" /> Stop Loss</span>
-                      </div>
-                  </div>
                </div>
 
                <div className="space-y-6 flex flex-col">
-                  {/* Debate Panel */}
                   <div className="flex-1 glass-card p-6 flex flex-col gap-6">
                      <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2"><BrainCircuit size={14}/> AI Debate Mode</h4>
                      <div className="flex-1 p-4 rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.02]">
@@ -252,13 +311,9 @@ const AIAdvisor = () => {
                </div>
             </div>
 
-            {/* Bottom Horizon: News, Framework, Scenarios */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-               {/* News Engine — Now with REAL news */}
                <div className="glass-card p-6 border-white/5 space-y-6">
                   <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2"><Newspaper size={14}/> Live News Feed</h4>
-                  
-                  {/* Real News from NewsAPI */}
                   {realNews.length > 0 ? (
                     realNews.map((item, i) => (
                       <div key={i} className="p-4 bg-white/5 rounded-2xl border border-white/5 space-y-3">
@@ -277,7 +332,6 @@ const AIAdvisor = () => {
                       </div>
                     ))
                   ) : (
-                    /* Fallback to AI-generated news */
                     analysis.news?.map((item, i) => (
                       <div key={i} className="p-4 bg-white/5 rounded-2xl border border-white/5 space-y-3">
                           <h5 className="font-bold text-sm text-white">{item.headline}</h5>
@@ -287,16 +341,11 @@ const AIAdvisor = () => {
                           <p className="text-[11px] italic font-medium text-blue-400 px-3 py-2 border-l-2 border-blue-500 bg-blue-500/[0.02]">
                               {item.impactChain}
                           </p>
-                          <div className="flex justify-between items-center pt-2">
-                              <span className="text-[10px] font-bold uppercase text-slate-500">Effect: {item.effect}</span>
-                              <span className={`text-[9px] font-black uppercase px-2 py-1 rounded ${item.impactLevel === 'High' ? 'bg-rose-500/20 text-rose-500' : 'bg-slate-500/20 text-slate-400'}`}>{item.impactLevel} Impact</span>
-                          </div>
                       </div>
                     ))
                   )}
                </div>
 
-               {/* Framework Checklist */}
                <div className="glass-card p-6 border-white/5 space-y-6">
                   <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2"><ShieldCheck size={14}/> Decision Framework</h4>
                   <div className="space-y-3">
@@ -313,12 +362,8 @@ const AIAdvisor = () => {
                           </div>
                       ))}
                   </div>
-                  <div className="w-full text-center p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                     <p className="text-[11px] text-blue-400 font-bold uppercase tracking-widest">{analysis.framework?.summary}</p>
-                  </div>
                </div>
 
-               {/* Scenarios */}
                <div className="glass-card p-6 border-white/5 flex flex-col justify-between">
                   <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2"><BarChart3 size={14}/> Scenario Matrix</h4>
                   <div className="space-y-6 flex-1 flex flex-col justify-center">
@@ -331,28 +376,6 @@ const AIAdvisor = () => {
                               <motion.div initial={{ width: 0 }} animate={{ width: `${Math.abs(analysis.scenarios?.worst || 0)}%` }} className="h-full bg-rose-500" />
                           </div>
                       </div>
-                      <div>
-                          <div className="flex justify-between items-center mb-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase">Expected Outcome</span>
-                              <span className="text-sm font-black text-blue-400">+{analysis.scenarios?.expected}%</span>
-                          </div>
-                          <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                              <motion.div initial={{ width: 0 }} animate={{ width: `${Math.abs(analysis.scenarios?.expected || 0)*2}%` }} className="h-full bg-blue-500" />
-                          </div>
-                      </div>
-                      <div>
-                          <div className="flex justify-between items-center mb-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase">Bullish Target</span>
-                              <span className="text-sm font-black text-emerald-500">+{analysis.scenarios?.best}%</span>
-                          </div>
-                          <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                              <motion.div initial={{ width: 0 }} animate={{ width: `${Math.abs(analysis.scenarios?.best || 0)*2}%` }} className="h-full bg-emerald-500" />
-                          </div>
-                      </div>
-                  </div>
-                  <div className="mt-6 p-4 rounded-2xl bg-white/5 border border-white/5 text-center">
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Suggested Allocation</p>
-                      <p className="text-sm font-black text-white">{analysis.suggestion?.amountRange} <span className="text-slate-500">({analysis.suggestion?.percentage} Cap)</span></p>
                   </div>
                </div>
             </div>
@@ -360,7 +383,6 @@ const AIAdvisor = () => {
         )}
       </AnimatePresence>
 
-      {/* Empty State */}
       {!analysis && !loading && (
         <div className="flex flex-col items-center justify-center py-20 opacity-30">
           <Database size={64} className="text-slate-500 mb-6" />

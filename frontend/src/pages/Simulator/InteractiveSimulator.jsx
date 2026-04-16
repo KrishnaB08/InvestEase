@@ -3,26 +3,40 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   TrendingUp, TrendingDown, DollarSign, Briefcase, 
   Activity, Zap, ShieldAlert, BarChart3, PieChart, 
-  RefreshCcw, ShoppingCart, HelpCircle, CheckCircle2, 
+  RefreshCcw, ShoppingCart, HelpCircle, CheckCircle2, BrainCircuit, Plus,
   XCircle, ChevronRight, Scale
 } from 'lucide-react';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
+import { fetchAIAdvice, fetchStockStats } from '../../utils/api';
 
-/* --- MOCK DATA --- */
-const INITIAL_STOCKS = [
-  { id: 'rel', symbol: 'RELIANCE', name: 'Reliance Industries', price: 2450, change: 0, trend: 'up', risk: 'Low', history: [2400, 2420, 2410, 2430, 2450] },
-  { id: 'tcs', symbol: 'TCS', name: 'Tata Consultancy', price: 3800, change: 0, trend: 'sideways', risk: 'Low', history: [3850, 3820, 3810, 3805, 3800] },
-  { id: 'infy', symbol: 'INFOSYS', name: 'Infosys Ltd', price: 1620, change: 0, trend: 'up', risk: 'Medium', history: [1580, 1590, 1600, 1610, 1620] },
-  { id: 'zom', symbol: 'ZOMATO', name: 'Zomato Ltd', price: 155, change: 0, trend: 'volatile', risk: 'High', history: [140, 160, 145, 158, 155] },
-  { id: 'hdfc', symbol: 'HDFC', name: 'HDFC Bank', price: 1420, change: 0, trend: 'down', risk: 'Low', history: [1480, 1460, 1450, 1440, 1420] }
-];
+const buildStock = (symbol, stats) => {
+  const price = Number(stats?.current_price || 100);
+  const avgReturn = Number(stats?.avg_daily_return || 0);
+  const volatility = Number(stats?.volatility_pct || 0);
+  const trend = avgReturn > 0.2 ? 'up' : avgReturn < -0.2 ? 'down' : 'sideways';
+  const risk = volatility > 2.2 ? 'High' : volatility > 1 ? 'Medium' : 'Low';
+  const history = [0.96, 0.98, 0.99, 1.01, 1].map((m) => Number((price * m).toFixed(2)));
+  return {
+    id: symbol.toLowerCase().replace(/\s+/g, '-'),
+    symbol,
+    name: stats?.name || symbol,
+    price,
+    change: avgReturn,
+    trend,
+    risk,
+    history
+  };
+};
+
+const DEFAULT_SYMBOLS = ['RELIANCE', 'TCS', 'INFOSYS', 'AAPL', 'MSFT'];
 
 /* --- SUB-COMPONENTS --- */
 
-const StockCard = ({ stock, onBuy, onSell, ownedQuantity }) => {
+const StockCard = ({ stock, onBuy, onSell, ownedQuantity, onLoadAI, aiLoading, aiSignal }) => {
   const isUp = stock.change >= 0;
   
   const getSuggestion = () => {
+    if (aiSignal?.action) return { text: `${aiSignal.action} (${aiSignal.confidence || 0}%)`, color: "text-purple-400" };
     if (stock.trend === 'up' && stock.change < 1) return { text: "Good Buy / Accumulate", color: "text-emerald-400" };
     if (stock.change > 4) return { text: "Profit Booking Zone", color: "text-rose-400" };
     if (stock.risk === 'High' && stock.trend === 'volatile') return { text: "High Volatility - Wait", color: "text-blue-400" };
@@ -97,6 +111,14 @@ const StockCard = ({ stock, onBuy, onSell, ownedQuantity }) => {
             SELL ({ownedQuantity})
           </button>
         )}
+        <button
+          onClick={() => onLoadAI(stock.symbol)}
+          className="px-3 py-3 rounded-xl bg-purple-500/15 border border-purple-500/25 hover:bg-purple-500/25 text-purple-200 font-black text-xs transition-all flex items-center justify-center gap-2"
+          title="Load Claude advice"
+        >
+          <BrainCircuit size={14} />
+          {aiLoading ? '...' : 'AI'}
+        </button>
       </div>
     </motion.div>
   );
@@ -107,18 +129,98 @@ const StockCard = ({ stock, onBuy, onSell, ownedQuantity }) => {
 const InteractiveSimulator = () => {
   const [balance, setBalance] = useState(() => Number(localStorage.getItem('sim_balance')) || 10000);
   const [portfolio, setPortfolio] = useState(() => JSON.parse(localStorage.getItem('sim_portfolio')) || {});
-  const [stocks, setStocks] = useState(INITIAL_STOCKS);
+  const [stocks, setStocks] = useState([]);
+  const [newSymbol, setNewSymbol] = useState('');
+  const [marketLoading, setMarketLoading] = useState(true);
+  const [marketError, setMarketError] = useState('');
   const [trades, setTrades] = useState(0);
   const [activeModal, setActiveModal] = useState(null); // { type, stock }
   const [amount, setAmount] = useState(1);
   const [event, setEvent] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const [aiSignals, setAiSignals] = useState({});
+  const [aiLoadingBySymbol, setAiLoadingBySymbol] = useState({});
 
   // Persistence
   useEffect(() => {
     localStorage.setItem('sim_balance', balance);
     localStorage.setItem('sim_portfolio', JSON.stringify(portfolio));
   }, [balance, portfolio]);
+
+  // Load starter symbols (users can add any valid ticker).
+  useEffect(() => {
+    let cancelled = false;
+    const loadMarket = async () => {
+      setMarketLoading(true);
+      setMarketError('');
+      try {
+        const responses = await Promise.allSettled(
+          DEFAULT_SYMBOLS.map((symbol) => fetchStockStats(symbol))
+        );
+        if (cancelled) return;
+
+        const hydrated = DEFAULT_SYMBOLS.map((symbol, idx) => {
+          const res = responses[idx];
+          return buildStock(symbol, res.status === 'fulfilled' ? res.value : null);
+        });
+        setStocks(hydrated);
+      } catch (error) {
+        if (!cancelled) {
+          setMarketError('Failed to load full market list. Please check backend.');
+        }
+      } finally {
+        if (!cancelled) setMarketLoading(false);
+      }
+    };
+    loadMarket();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const addSymbolToSimulator = async () => {
+    const symbol = newSymbol.trim().toUpperCase();
+    if (!symbol) return;
+    if (stocks.some((s) => s.symbol === symbol)) {
+      setFeedback({ type: 'error', text: `${symbol} is already in the simulator.` });
+      return;
+    }
+    setMarketLoading(true);
+    setMarketError('');
+    try {
+      const stats = await fetchStockStats(symbol);
+      setStocks((prev) => [buildStock(symbol, stats), ...prev]);
+      setNewSymbol('');
+      setFeedback({ type: 'success', text: `${symbol} added with live market data.` });
+    } catch (error) {
+      setMarketError(`Unable to load ${symbol}. Try Yahoo-style ticker like AAPL or INFY.NS.`);
+    } finally {
+      setMarketLoading(false);
+    }
+  };
+
+  const loadAISignal = async (symbol) => {
+    if (aiSignals[symbol] || aiLoadingBySymbol[symbol]) return;
+    setAiLoadingBySymbol((prev) => ({ ...prev, [symbol]: true }));
+    try {
+      const ai = await fetchAIAdvice(symbol);
+      setAiSignals((prev) => ({
+        ...prev,
+        [symbol]: {
+          action: ai?.decisionInfo?.action || 'Wait',
+          confidence: ai?.decisionInfo?.confidence || 0,
+          riskLevel: ai?.decisionInfo?.riskLevel || 'Medium'
+        }
+      }));
+    } catch (error) {
+      setAiSignals((prev) => ({
+        ...prev,
+        [symbol]: { action: 'Wait', confidence: 0, riskLevel: 'High' }
+      }));
+    } finally {
+      setAiLoadingBySymbol((prev) => ({ ...prev, [symbol]: false }));
+    }
+  };
 
   // Real-time Simulation Engine
   useEffect(() => {
@@ -206,6 +308,35 @@ const InteractiveSimulator = () => {
 
   return (
     <div className="space-y-12">
+      {marketLoading && (
+        <div className="glass-card p-5 text-xs font-bold uppercase tracking-widest text-slate-400">
+          Loading all stocks from backend market universe...
+        </div>
+      )}
+      {marketError && (
+        <div className="glass-card p-5 text-xs font-bold uppercase tracking-widest text-rose-400 border-rose-500/20">
+          {marketError}
+        </div>
+      )}
+      <div className="glass-card p-5 border-white/10">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">
+          Add Any Stock / Ticker
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            value={newSymbol}
+            onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
+            placeholder="Type symbol like AAPL, TSLA, RELIANCE, INFY.NS"
+            className="flex-1 bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold uppercase text-white outline-none focus:border-blue-500/40"
+          />
+          <button
+            onClick={addSymbolToSimulator}
+            className="neo-btn-primary px-5 py-3 text-sm inline-flex items-center justify-center gap-2"
+          >
+            <Plus size={16} /> Add Ticker
+          </button>
+        </div>
+      </div>
       {/* 🏛️ Top Portfolio Bar */}
       <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="glass-card p-6 bg-gradient-to-br from-blue-500/10 to-transparent">
@@ -266,6 +397,9 @@ const InteractiveSimulator = () => {
             ownedQuantity={portfolio[stock.id] || 0}
             onBuy={() => { setActiveModal({ type: 'buy', stock }); setAmount(1); }}
             onSell={() => { setActiveModal({ type: 'sell', stock }); setAmount(1); }}
+            onLoadAI={loadAISignal}
+            aiLoading={!!aiLoadingBySymbol[stock.symbol]}
+            aiSignal={aiSignals[stock.symbol]}
           />
         ))}
       </section>
