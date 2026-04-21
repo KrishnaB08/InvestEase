@@ -79,7 +79,7 @@ const ProTradingChart = ({ data, markers = [], indicators = {} }) => {
   }, [markers]);
 
   return (
-    <div className="w-full relative glass-card p-4 overflow-hidden border-blue-500/10 bg-black/40">
+    <div className="w-full relative rounded-3xl p-4 overflow-hidden border border-slate-800 bg-gradient-to-b from-slate-900 to-black shadow-2xl">
       <div className="absolute top-6 left-6 z-10 flex gap-4">
          <div className="px-3 py-1 bg-blue-500 rounded text-[10px] font-black italic tracking-widest">LIVE TERMINAL</div>
          <div className="px-3 py-1 bg-emerald-500/10 rounded text-[10px] font-bold text-emerald-400">YFINANCE CONNECTED</div>
@@ -403,10 +403,10 @@ const ProTerminal = () => {
                        </div>
                     </div>
                     
-                    <div className="p-4 bg-black/40 rounded-2xl flex justify-between items-center">
+                    <div className="p-6 bg-gradient-to-r from-slate-900 to-black rounded-2xl border border-slate-800 flex justify-between items-center shadow-lg">
                        <div>
-                          <p className="text-[10px] text-slate-600 font-bold uppercase">Estimated Cost</p>
-                          <p className="text-xl font-black text-blue-400">₹{(currentPrice * order.qty).toLocaleString()}</p>
+                          <p className="text-[10px] text-emerald-500 font-black uppercase tracking-widest mb-1">Estimated Capital Requirement</p>
+                          <p className="text-3xl font-black text-white italic">₹{(currentPrice * order.qty).toLocaleString()}</p>
                        </div>
                        <div className="text-right">
                           <p className="text-[9px] text-slate-700 font-bold uppercase">Risk Per Trade</p>

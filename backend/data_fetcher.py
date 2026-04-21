@@ -60,6 +60,26 @@ def _symbol_candidates(symbol: str) -> list:
     return [raw, f"{raw}.NS", f"{raw}.BO"]
 
 
+def sanitize_symbol(symbol: str) -> str:
+    """Map common names to tickers and ensure exchange suffix."""
+    s = symbol.upper().strip()
+    if s in STOCK_LIST:
+        return STOCK_LIST[s]
+    if "." not in s:
+        # Default to NSE for major Indian stocks
+        return f"{s}.NS"
+    return s
+
+def get_stock_history(symbol: str, period: str = "1y") -> pd.DataFrame:
+    """Fetch history using yfinance with intelligent symbol sanitization."""
+    ticker_symbol = sanitize_symbol(symbol)
+    ticker = yf.Ticker(ticker_symbol)
+    df = ticker.history(period=period)
+    df["daily_return"] = df["Close"].pct_change()
+    df.attrs["resolved_symbol"] = ticker_symbol
+    return df
+
+
 def _fetch_first_history(candidates: list, period: str):
     for candidate in candidates:
         ticker = yf.Ticker(candidate)
@@ -127,10 +147,7 @@ def get_frontend_chart_data(symbol: str, period: str = "6mo") -> list:
     """Fetch history and map precisely to Lightweight Charts {time, open, high, low, close}."""
     df = get_stock_history(symbol, period)
     chart_data = []
-    
-    # yfinance uses datetime index
     for index, row in df.iterrows():
-        # Ensure time is integer unix timestamp in SECONDS
         unix_time = int(index.timestamp())
         chart_data.append({
             "time": unix_time,
@@ -139,5 +156,29 @@ def get_frontend_chart_data(symbol: str, period: str = "6mo") -> list:
             "low": round(row["Low"], 2),
             "close": round(row["Close"], 2)
         })
-        
     return chart_data
+
+def get_stock_cagr(symbol: str, period: str = "5y") -> float:
+    """Calculates the Compound Annual Growth Rate over the given period."""
+    try:
+        df = get_stock_history(symbol, period)
+        if len(df) < 20: return 0.12 # Fallback
+        start_price = df["Close"].iloc[0]
+        end_price = df["Close"].iloc[-1]
+        years = len(df) / 252 
+        if start_price <= 0 or years <= 0: return 0.12
+        cagr = (end_price / start_price) ** (1 / years) - 1
+        return round(float(cagr), 4)
+    except Exception:
+        return 0.12
+
+def get_historical_yield(symbol: str) -> float:
+    """Simple 1-year yield for quicker snapshots."""
+    try:
+        df = get_stock_history(symbol, "1y")
+        if len(df) < 2: return 0.12
+        start = df["Close"].iloc[0]
+        end = df["Close"].iloc[-1]
+        return round((end - start) / start, 4)
+    except:
+        return 0.12

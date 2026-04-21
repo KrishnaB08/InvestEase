@@ -57,6 +57,15 @@ export const fetchFxTrend = (base = 'USD', quote = 'INR', days = 7) =>
 export const fetchNews = (symbol) => 
   api.get(`/news/${symbol}`).then(res => res.data);
 
+export const fetchDiscovery = (sector) =>
+  api.get(`/stocks/discovery?sector=${sector}`).then(res => res.data);
+
+export const fetchDiscoveryAI = (payload) =>
+  api.post(`/stocks/discovery/ai-analysis`, payload).then(res => res.data);
+
+export const fetchFieldLeader = (sector) =>
+  api.get(`/stocks/field-leader?sector=${sector}`).then(res => res.data);
+
 // ========================
 // SIMULATION
 // ========================
@@ -86,6 +95,12 @@ export const fetchTradeHistory = () =>
 
 export const fetchPortfolioSummary = () => 
   api.get('/portfolio/summary').then(res => res.data);
+
+export const fetchStockCAGR = (symbol) =>
+  api.get(`/stocks/cagr/${symbol}`).then(res => res.data);
+
+export const fetchPeers = (symbol) =>
+  api.get(`/stocks/${symbol}/peers`).then(res => res.data);
 
 export { API_BASE };
 export default api;

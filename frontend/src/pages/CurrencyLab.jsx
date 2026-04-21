@@ -170,7 +170,7 @@ const CurrencyLab = () => {
         <h2 className="text-5xl font-black italic tracking-tighter">
           Currency Conversion & <span className="text-purple-400">Financial Impact Lab</span>
         </h2>
-        <p className="text-slate-400 max-w-3xl mx-auto">
+        <p className="text-slate-600 max-w-3xl mx-auto">
           Convert currencies, understand INR purchasing power, and evaluate how forex movement affects your global investment decisions.
         </p>
       </header>
@@ -187,7 +187,7 @@ const CurrencyLab = () => {
         onSwap={swapCurrencies}
       />
 
-      <div className="glass-card border-white/10">
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center gap-4">
           <div className="w-11 h-11 rounded-2xl bg-blue-500/15 border border-blue-500/25 flex items-center justify-center text-blue-300 shrink-0">
             <Search size={18} />
@@ -199,7 +199,7 @@ const CurrencyLab = () => {
               value={shareSymbol}
               onChange={(e) => setShareSymbol(e.target.value.toUpperCase())}
               placeholder="Type ticker like TCS, RELIANCE, INFOSYS"
-              className="w-full bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-lg font-bold uppercase text-white outline-none focus:border-blue-500/40"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-lg font-bold uppercase text-slate-900 outline-none focus:border-blue-500/40"
             />
             <p className="text-xs text-slate-400 mt-2">
               Real price now: Rs. {liveSharePrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
@@ -243,7 +243,7 @@ const CurrencyLab = () => {
             <BrainCircuit size={16} className="text-blue-400" />
             AI Currency Explanation
           </h3>
-          <p className="text-sm text-slate-300 leading-relaxed">
+          <p className="text-sm text-slate-600 leading-relaxed">
             {aiExplanation}
           </p>
           <div className="p-4 rounded-2xl border border-blue-500/20 bg-blue-500/10">
@@ -251,10 +251,10 @@ const CurrencyLab = () => {
               <BarChart3 size={14} />
               Smart Use Case Integration
             </p>
-            <ul className="space-y-2 text-xs text-slate-300">
+            <ul className="space-y-2 text-xs text-slate-600">
               <li>
-                If you invest <span className="font-bold text-white">$500</span> in US stocks, reserve roughly{' '}
-                <span className="font-bold text-white">Rs. {usInvestmentInr.toLocaleString('en-IN')}</span> from your capital.
+                If you invest <span className="font-bold text-slate-900">$500</span> in US stocks, reserve roughly{' '}
+                <span className="font-bold text-slate-900">Rs. {usInvestmentInr.toLocaleString('en-IN')}</span> from your capital.
               </li>
               <li>
                 Add forex impact into AI Advisor confidence when USD trend is rising.

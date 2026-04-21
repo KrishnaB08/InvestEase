@@ -5,13 +5,14 @@ from typing import List, Optional
 import os
 from dotenv import load_dotenv
 
-from data_fetcher import get_stock_stats, STOCK_LIST
+from data_fetcher import get_stock_stats, STOCK_LIST, get_stock_cagr
 from monte_carlo import run_simulation, simulate_crash
 from ml_model import calculate_loss_probability
-from ai_engine import get_ai_advice
+from ai_engine import get_ai_advice, get_discovery_ai_advice
 from news_fetcher import get_stock_news, get_news_headlines_for_ai
 from database import save_fear_score, get_fear_scores, save_trade, get_trades, get_portfolio_summary
 from fx_service import convert_currency, get_trend
+from discovery_engine import get_top_five_stocks, compare_top_five, get_field_leader, get_peers
 import requests
 
 load_dotenv()
@@ -48,6 +49,7 @@ class AIAdviceRequest(BaseModel):
     trend: str
     risk: str
     currency: str = "INR"
+    news_context: Optional[str] = ""
 
 @app.get("/")
 def home():
@@ -159,7 +161,8 @@ def ai_advice(req: AIAdviceRequest):
             change=req.change,
             trend=req.trend,
             risk=req.risk,
-            currency=req.currency
+            currency=req.currency,
+            news_context=req.news_context
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -217,6 +220,61 @@ def trade_history():
     """Retrieve trade history."""
     trades = get_trades()
     return {"trades": trades}
+
+# ========================
+# DISCOVERY ENGINE
+# ========================
+
+@app.get("/stocks/discovery")
+def discovery_stocks(sector: str = "All"):
+    """Get Top 5 ranked stocks with comparison metadata."""
+    try:
+        top_five = get_top_five_stocks(sector)
+        comparison = compare_top_five(top_five)
+        return {
+            "top_five": top_five,
+            "comparison": comparison,
+            "sector": sector
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/stocks/field-leader")
+def field_leader(sector: str):
+    """Get the current best stock in a specific sector."""
+    try:
+        leader = get_field_leader(sector)
+        return {"leader": leader}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/stocks/discovery/ai-analysis")
+def discovery_ai_analysis(req: dict):
+    """Gemini-powered strategic pick from the top 5 finalists."""
+    try:
+        top_five = req.get("top_five", [])
+        news_context = req.get("news_context", "")
+        return get_discovery_ai_advice(top_five, news_context)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/stocks/cagr/{symbol}")
+def stock_cagr(symbol: str):
+    """Get the 5-year CAGR for a stock."""
+    try:
+        cagr = get_stock_cagr(symbol)
+        return {"symbol": symbol, "cagr": cagr}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/stocks/{symbol}/peers")
+def stock_peers(symbol: str):
+    """Find similar stocks for comparison."""
+    try:
+        peers = get_peers(symbol)
+        return {"symbol": symbol, "peers": peers}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/portfolio/summary")
 def portfolio_summary():

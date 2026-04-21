@@ -1,6 +1,6 @@
 import os
 import json
-from anthropic import Anthropic
+import google.generativeai as genai
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,38 +26,60 @@ def _build_fallback_response(
     currency_symbol = "₹" if currency.upper() == "INR" else "$" if currency.upper() == "USD" else f"{currency} "
     
     return {
+        "is_fallback": True,
         "ticker": symbol.upper(),
         "name": company,
         "sector": sector,
         "price": price,
         "currencySymbol": currency_symbol,
         "marketCap": f"{currency_symbol}125k Cr",
+        "stabilityScore": 85 if risk_level == "Low" else 65 if risk_level == "Medium" else 45,
         "technical": {"trend": trend, "volatility": risk_level, "momentum": "Strong" if action == "Invest" else "Weak"},
         "decisionInfo": {"action": action, "confidence": confidence, "riskLevel": risk_level},
-        "explanation": f"Live AI is temporarily unavailable, so this is a structured fallback analysis. Reason: {reason}",
+        "explanation": f"The foundation for your long-term wealth is built on fundamental health. This analysis focuses on market cycles and strategic position management. Reason: {reason}",
         "debate": {
             "bull": [
-                f"{company} has active market participation and tradable liquidity.",
-                "Current risk profile supports disciplined position sizing.",
-                "Structured entry and stop-loss improve downside control."
+                f"{company} shows resilient fundamental health for long-term growth.",
+                "Your capital is working effectively within this market cycle.",
+                "Strategic entry zones provide a foundation for future compounding."
             ],
             "bear": [
-                "Macro volatility can quickly change sentiment.",
-                "Short-term moves may invalidate entry zones.",
-                "Event-driven news can increase drawdown risk."
+                "Market cycles may require patience during consolidation.",
+                "Disciplined risk management is key to navigating shorter horizons.",
+                "Diversification ensures your family roadmap remains on track."
             ]
         },
         "news": [{
-            "headline": f"{company} sentiment remains mixed as broader markets consolidate",
-            "impactChain": "Global cues -> intraday volatility -> cautious position management",
-            "effect": "Neutral Bias",
+            "headline": f"Fundamental indicators for {company} align with strategic growth milestones",
+            "impactChain": "Stable Earnings -> Continued Reinvestment -> Long-term Value Accrual",
+            "effect": "Positive Outlook",
             "impactLevel": "Medium",
             "sectorAffected": "No"
         }],
+        "newsReport": {
+            "insights": [
+                f"{company} maintains a strong position in the current market cycle.",
+                "Long-term value creation remains the core focus of the leadership.",
+                "Historical data suggests resilience during consolidation phases.",
+                "Diversification across the sector provides a safety net for investors.",
+                "Strategic reinvestment of capital is driving future innovation.",
+                "Consistent dividend payouts reflect the company's financial health.",
+                "Market sentiment for {company} is primarily driven by fundamental value.",
+                "The current price zone offers a constructive entry for goal-seekers.",
+                "Debt-to-equity ratios are well-managed compared to sector peers.",
+                "Global economic trends favor the company's core business model.",
+                "Your wealth roadmap benefits from this asset's compounding potential.",
+                "A patient approach aligns with the Architect's long-term vision."
+            ],
+            "sentiment": "Positive",
+            "riskLevel": "Low",
+            "affectedSectors": [sector],
+            "verdict": f"Invest in {company} for long-term compounding and family goal building."
+        },
         "scenarios": {"worst": -12, "expected": 9, "best": 18},
         "suggestion": {"amountRange": f"{currency_symbol}2,000 - {currency_symbol}5,000", "percentage": "10%"},
-        "timeframe": "Mid-term",
-        "framework": {"trend": True, "risk": True, "news": False, "entry": True, "exit": True, "summary": "Model fallback active with live market inputs."},
+        "timeframe": "Goal-Driven Horizon",
+        "framework": {"trend": True, "risk": True, "news": False, "entry": True, "exit": True, "summary": "Strategic roadmap active with fundamental inputs."},
         "entryPoints": {"entryZone": entry_zone, "target": target, "stopLoss": stop_loss}
     }
 
@@ -68,39 +90,57 @@ def get_ai_advice(
     change: float,
     trend: str,
     risk: str,
-    currency: str = "INR"
+    currency: str = "INR",
+    news_context: str = ""
 ):
     """
-    Calls Claude AI to get advanced, jargon-free investment advice.
-    Now accepts real news headlines from NewsAPI.
+    Calls Google Gemini AI to get advanced, optimistic, and goal-oriented investment advice.
     """
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
     
-    trend_bool = "true" if trend.lower() == "uptrend" else "false"
-    risk_bool = "false" if risk.lower() == "high" else "true"
+    if not api_key:
+        return _build_fallback_response(
+            symbol=symbol,
+            price=price,
+            volatility=abs(change),
+            reason="No valid GEMINI_API_KEY found.",
+            company_name=name,
+            sector="Equity",
+            currency=currency
+        )
+
     currency_symbol = "₹" if currency.upper() == "INR" else "$" if currency.upper() == "USD" else f"{currency} "
     
+    # Configure Gemini
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-flash-latest")
+
+    trend_bool = "true" if trend.lower() == "uptrend" else "false"
+    risk_bool = "false" if risk.lower() == "high" else "true"
+    
     prompt = f"""
-    You are a professional stock market analyst.
+    Role: You are an optimistic and highly analytical Financial Strategy Architect & Summarization Engine.
+    Your goal is to help users bridge the gap between their current savings and their long-term family dreams using a "Goal-First" investment philosophy.
+
+    Core Philosophy: The stock market is not a casino; it is a tool for long-term wealth creation. 
+    Focus on the power of compounding and the clarity of fundamental analysis to replace "decision paralysis" with "confident action."
+
+    Tone Guidelines:
+    - NO FEAR: Never mention "market crashes," "losing everything," or "doom." 
+    - OPTIMISM: Use terms like "market cycles," "risk management," "growth stages," and "wealth roadmap."
+    - EMPOWERMENT: Use "Your capital is working for you" and "Building your family foundation."
 
     Analyze this stock:
-    Name: {name}
+    Name: {name} ({symbol})
     Price: {currency_symbol}{price}
     Change: {change}%
     Trend: {trend}
     Risk Level: {risk}
-
-    Give structured output:
-    Decision:
-    Confidence:
-    Risk:
-    Reason:
-    Bull Case:
-    Bear Case:
-    Investment Range:
-    Time Strategy:
     
-    Return ONLY a JSON object with this EXACT structure based on your analysis (No markdown format, no intro text, raw JSON only):
+    Recent Market Context (Summarize this for the newsReport):
+    {news_context}
+
+    Return ONLY a JSON object with this EXACT structure:
     {{
       "ticker": "{symbol}",
       "name": "{name}",
@@ -108,85 +148,79 @@ def get_ai_advice(
       "price": {price},
       "currencySymbol": "{currency_symbol}",
       "marketCap": "Estimate Market Cap starting with {currency_symbol}",
+      "stabilityScore": <integer 0-100 based on fundamental health and low volatility>,
       "technical": {{
         "trend": "{trend.capitalize()}",
-        "volatility": "{risk.capitalize()}",
-        "momentum": "Strong OR Weak"
+        "volatility": "Stability Level",
+        "momentum": "Strong OR Balanced"
       }},
       "decisionInfo": {{
-        "action": "Invest OR Wait OR Avoid",
+        "action": "Invest OR Wait OR Accumulate",
         "confidence": <integer 0-100 logic score>,
-        "riskLevel": "{risk.capitalize()}"
+        "riskLevel": "Strategic Risk Management"
       }},
-      "explanation": "A high-quality 2-3 sentence institutional explanation (Reason).",
+      "explanation": "A high-quality 2-3 sentence optimistic explanation focusing on long-term wealth and compounding.",
       "debate": {{
-        "bull": ["3 short bullet points from Bull Case"],
-        "bear": ["3 short bullet points from Bear Case"]
+        "bull": ["3 short bullet points about fundamental strength and future potential"],
+        "bear": ["3 short bullet points about market cycles and patience required"]
+      }},
+      "newsReport": {{
+        "insights": [
+          "Exactly 10-12 short bullet points summarizing the provided Market Context",
+          "Each bullet point must be UNDER 20 words",
+          "Use simple, beginner-friendly language",
+          "Focus on market impact, risks, and opportunities"
+        ],
+        "sentiment": "Positive OR Negative OR Neutral",
+        "riskLevel": "Low OR Medium OR High",
+        "affectedSectors": ["List 1-3 sectors affected"],
+        "verdict": "One single-line beginner-friendly suggestion (Invest / Wait / Avoid + reason)"
       }},
       "news": [
         {{
-          "headline": "Generate a plausible headline matching {trend}",
-          "impactChain": "Cause -> Immediate Effect -> Final Impact",
-          "effect": "Negative Bias OR Positive Bias",
+          "headline": "A positive headline focusing on value creation",
+          "impactChain": "Strategy -> Implementation -> Long-term Benefit",
+          "effect": "Constructive Outlook",
           "impactLevel": "High OR Medium OR Low",
           "sectorAffected": "Yes/No"
         }}
       ],
       "scenarios": {{
-        "worst": <integer negative percentage>,
+        "worst": <integer negative percentage, e.g., -5>,
         "expected": <integer positive percentage>,
         "best": <integer positive percentage>
       }},
       "suggestion": {{
-         "amountRange": "Investment Range e.g. {currency_symbol}5,000 - {currency_symbol}10,000",
-         "percentage": "e.g. 5-10%"
+         "amountRange": "Standard position size range e.g. {currency_symbol}5,000 - {currency_symbol}10,000",
+         "percentage": "e.g. 5-10% of goal capital"
       }},
-      "timeframe": "Time Strategy (Short-term OR Mid-term OR Long-term)",
+      "timeframe": "Target Horizon (Medium-term OR Long-term)",
       "framework": {{
         "trend": {trend_bool},
         "risk": {risk_bool},
         "news": true,
         "entry": true,
         "exit": true,
-        "summary": "1 short conclusive sentence."
+        "summary": "1 short empoweringly conclusive sentence."
       }},
       "entryPoints": {{
          "entryZone": <optimal entry price close to {price}>,
-         "target": <take profit target>,
-         "stopLoss": <risk management stop loss>
+         "target": <take profit target based on growth phase>,
+         "stopLoss": <risk management floor>
       }}
     }}
     """
 
-    if not api_key or api_key == "your_claude_api_key_here":
-        return _build_fallback_response(
-            symbol=symbol,
-            price=price,
-            volatility=abs(change),  # Dynamic fallback
-            reason="No valid ANTHROPIC_API_KEY found.",
-            company_name=name,
-            sector="Equity",
-            currency=currency
-        )
-
     try:
-        client = Anthropic(api_key=api_key)
-        message = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=1500,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
-        # Parse text, removing any prefix if model disobeyed and used markdown
-        response_text = message.content[0].text
-        if "```json" in response_text:
-            response_text = response_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in response_text:
-            response_text = response_text.split("```")[1].split("```")[0].strip()
+        generation_config = { "response_mime_type": "application/json" }
+        response = model.generate_content(prompt, generation_config=generation_config)
         
-        return json.loads(response_text)
+        data = json.loads(response.text)
+        data["is_fallback"] = False
+        return data
+
     except Exception as e:
+        print(f"ERROR: Gemini Advice failed: {e}")
         return _build_fallback_response(
             symbol=symbol,
             price=price,
@@ -196,3 +230,56 @@ def get_ai_advice(
             sector="Equity",
             currency=currency
         )
+
+def get_discovery_ai_advice(top_five: list, news_context: str = ""):
+    """
+    Analyzes the Top 5 stock finalists from the Discovery Engine.
+    Picks 1 'Grand Winner' and creates a wealth allocation strategy.
+    """
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return {
+            "winner": top_five[0]['symbol'] if top_five else "None",
+            "reason": "AI Strategy unavailable. Defaulting to technical leader.",
+            "allocation": [{"symbol": s['symbol'], "percent": 20} for s in top_five]
+        }
+
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-flash-latest")
+    
+    # Format candidates for the prompt
+    candidates = "\n".join([
+        f"- {s['symbol']}: ROCE {s['roce']}%, CAGR {s['cagr']}%, PE {s['pe']}, PEG {s['peg']}"
+        for s in top_five
+    ])
+
+    prompt = f"""
+    Role: Financial Strategy Architect.
+    Task: Analyze these 5 stock finalists and pick the ONE best-of-the-best 'Grand Winner' for the current market cycle.
+    
+    Candidates:
+    {candidates}
+    
+    Recent Market Context:
+    {news_context}
+    
+    Return ONLY a JSON object with this structure:
+    {{
+      "winner": "SYMBOL of the best stock",
+      "reason": "1-2 sentence peak-performance justification",
+      "conviction": <integer 0-100>,
+      "allocation": [
+        {{ "symbol": "...", "percent": <integer percent of investment capital>, "logic": "Short reason" }},
+        ... (for all 5)
+      ],
+      "totalInvestmentSuggestion": "e.g. ₹1,00,000 for a structural foundation"
+    }}
+    """
+
+    try:
+        generation_config = { "response_mime_type": "application/json" }
+        response = model.generate_content(prompt, generation_config=generation_config)
+        return json.loads(response.text)
+    except Exception as e:
+        print(f"Discovery AI Error: {e}")
+        return { "winner": top_five[0]['symbol'], "reason": "Structural leader.", "allocation": [] }

@@ -44,7 +44,7 @@ const LearningHub = () => {
       className="flex flex-col min-h-screen"
     >
       {/* Top Breadcrumb / Stage Indicator */}
-      <div className="flex flex-wrap items-center gap-4 mb-12 border-b border-white/5 pb-8">
+      <div className="flex flex-wrap items-center gap-4 mb-12 border-b border-slate-200 pb-8">
          <div className="px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center gap-2">
             <Compass className="text-blue-400" size={16} />
             <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Pro Academy Phase I</span>
@@ -52,7 +52,7 @@ const LearningHub = () => {
          <ChevronRight className="text-slate-700" size={16} />
          <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Module:</span>
-            <span className="text-xs font-bold uppercase tracking-widest text-white">{currentModule.name}</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-slate-900">{currentModule.name}</span>
          </div>
       </div>
 
@@ -74,17 +74,17 @@ const LearningHub = () => {
                     onClick={() => setActiveModule(m.id)}
                     className={`w-full group text-left px-6 py-4 rounded-2xl border transition-all flex items-center gap-4 ${
                       isActive 
-                      ? 'bg-blue-600/10 border-blue-500/30 text-blue-400' 
-                      : 'bg-white/5 border-white/5 text-slate-500 hover:border-white/20'
+                      ? 'bg-blue-600/5 border-blue-500/30 text-blue-600' 
+                      : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-slate-300'
                     }`}
                   >
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
-                       isActive ? 'bg-blue-500/20 text-blue-400' : 'bg-white/5 text-slate-600 group-hover:text-slate-400'
+                       isActive ? 'bg-blue-500/10 text-blue-600' : 'bg-slate-100 text-slate-400 group-hover:text-slate-600'
                     }`}>
                        <Icon size={20} />
                     </div>
                     <div>
-                      <p className={`font-bold text-sm ${isActive ? 'text-white' : 'text-slate-400'}`}>{m.name}</p>
+                      <p className={`font-bold text-sm ${isActive ? 'text-slate-900' : 'text-slate-500'}`}>{m.name}</p>
                       <p className="text-[10px] opacity-60 uppercase font-mono">{m.desc}</p>
                     </div>
                   </button>
@@ -97,11 +97,11 @@ const LearningHub = () => {
               
               <div className="glass-card bg-gradient-to-br from-yellow-500/10 to-transparent p-6 text-center">
                  <Trophy className="text-yellow-500 mx-auto mb-3" size={32} />
-                 <h5 className="text-xs font-black uppercase mb-1">Academy Level</h5>
-                 <p className="text-xl font-black text-yellow-500">BRONZE II</p>
-                 <div className="w-full h-1 bg-white/5 rounded-full mt-4 overflow-hidden">
-                    <div className="w-1/3 h-full bg-yellow-500" />
-                 </div>
+                  <h5 className="text-xs font-black uppercase mb-1 text-slate-900">Academy Level</h5>
+                  <p className="text-xl font-black text-yellow-600">BRONZE II</p>
+                  <div className="w-full h-1 bg-slate-200 rounded-full mt-4 overflow-hidden">
+                     <div className="w-1/3 h-full bg-yellow-500" />
+                  </div>
               </div>
            </div>
         </aside>
@@ -121,14 +121,14 @@ const LearningHub = () => {
            </AnimatePresence>
 
            {/* Module Navigation Footer */}
-           <div className="flex justify-between items-center pt-12 border-t border-white/5">
-              <button 
-                onClick={() => {}} 
-                className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white transition-colors"
-                disabled
-              >
-                 <ArrowLeft size={14} /> PREVIOUS MODULE
-              </button>
+            <div className="flex justify-between items-center pt-12 border-t border-slate-200">
+               <button 
+                 onClick={() => {}} 
+                 className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-slate-900 transition-colors"
+                 disabled
+               >
+                  <ArrowLeft size={14} /> PREVIOUS MODULE
+               </button>
               <button 
                 onClick={() => {
                   const idx = modules.findIndex(m => m.id === activeModule);
